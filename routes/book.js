@@ -24,13 +24,13 @@ const formResponse = {
           id: "nameId",
           name: "What's your name?",
           type: "ShortAnswer",
-          value: 14,
+          value: "14",
         },
         {
           id: "nameId",
           name: "What's your name?",
           type: "ShortAnswer",
-          value: 15,
+          value: "15",
         },
         {
           id: "birthdayId",
@@ -72,48 +72,66 @@ router.get("/form", async (req, res) => {
 router.get("/:formId/filteredResponses", async (req, res) => {
   console.log("req.query", req.query);
   const formId = req.params.formId;
-  // Extract filters from query parameters
-  const filters = JSON.parse(req.query.filters || "[]");
-  console.log("filters", filters);
+  // Extract individual filter parameters from query
+  const id = req.query.id;
+  const condition = req.query.condition;
+  // Parse the value as a number if it represents a numeric value
+  const value = isNaN(parseFloat(req.query.value))
+    ? req.query.value
+    : parseFloat(req.query.value);
+
   try {
     const filteredResponses = formResponse.responses
       .map((response) => {
         // Check if the response passes all filter conditions
         return response.questions.filter((question) => {
-          return filters.every((filter) => {
-            if (question.id !== filter.id) return false;
-
+          // Check if the question matches the filter
+          if (question.id === id) {
             // Determine the type of value
             let questionValue;
-            if (!isNaN(question.value)) {
+            if (!isNaN(parseFloat(question.value))) {
               questionValue = parseFloat(question.value);
             } else {
               questionValue = question.value;
             }
-            console.log("question", question.value);
-            console.log("filtered question", filter.value);
 
+            console.log("questiontext", typeof question.value, typeof value);
             // Perform comparison based on the type of value
-            switch (filter.condition) {
+            switch (condition) {
               case "equals":
-                return question.value === filter.value;
+                return typeof value === "number"
+                  ? Number(question.value) === value
+                  : question.value === value;
+
               case "does_not_equal":
-                return question.value !== filter.value;
+                return question.value !== value;
               case "greater_than":
-                return typeof question.value !== "string"
-                  ? question.value > filter.value
+                return typeof questionValue !== "string"
+                  ? questionValue > value
                   : false;
               case "less_than":
-                return typeof question.value !== "string"
-                  ? question.value < filter.value
+                return typeof questionValue !== "string"
+                  ? questionValue < value
                   : false;
               default:
                 return false; // Invalid condition, response fails filter
             }
-          });
+          } else {
+            return false; // Question id doesn't match filter id
+          }
         });
       })
       .flat(); // Flatten the array of arrays
+
+    // User found, check if password matches
+
+    if (!req.query.condition || !req.query.value) {
+      return res
+        .status(401)
+        .json({ message: "Condition and value are required" });
+    } else if (filteredResponses.length === 0) {
+      return res.status(404).json({ message: "Data not found" });
+    }
 
     console.log("filtered response", filteredResponses);
     res.json({
