@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Book = require("../models/book.js");
-const dayjs = require("dayjs"); // Import dayjs library for date comparison
+const moment = require("moment");
 require("dotenv").config();
 
 const formResponse = {
@@ -36,7 +36,7 @@ const formResponse = {
           id: "birthdayId",
           name: "What is your birthday?",
           type: "DatePicker",
-          value: "2024-02-22T05:01:47.691Z",
+          value: "2024-02-22T05:01:45.691Z",
         },
         {
           id: "nameId",
@@ -76,11 +76,16 @@ router.get("/:formId/filteredResponses", async (req, res) => {
   const id = req.query.id;
   const condition = req.query.condition;
   // Parse the value as a number if it represents a numeric value
-  const value = isNaN(parseFloat(req.query.value))
+  let value = isNaN(parseFloat(req.query.value))
     ? req.query.value
     : parseFloat(req.query.value);
 
   try {
+    if (req.query.id === "birthdayId" && !moment(req.query.value).isValid()) {
+      return res
+        .status(401)
+        .json({ message: "Provide a valid date for birthdayId" });
+    }
     const filteredResponses = formResponse.responses
       .map((response) => {
         // Check if the response passes all filter conditions
@@ -96,25 +101,52 @@ router.get("/:formId/filteredResponses", async (req, res) => {
             }
 
             console.log("questiontext", typeof question.value, typeof value);
-            // Perform comparison based on the type of value
-            switch (condition) {
-              case "equals":
-                return typeof value === "number"
-                  ? Number(question.value) === value
-                  : question.value === value;
 
-              case "does_not_equal":
-                return question.value !== value;
-              case "greater_than":
-                return typeof questionValue !== "string"
-                  ? questionValue > value
-                  : false;
-              case "less_than":
-                return typeof questionValue !== "string"
-                  ? questionValue < value
-                  : false;
-              default:
-                return false; // Invalid condition, response fails filter
+            if (req.query.id === "birthdayId") {
+              const responseDate = moment(question.value);
+              const filterDate = moment(req.query.value);
+
+              switch (req.query.condition) {
+                case "equals":
+                  return responseDate.isSame(filterDate);
+                case "does_not_equal":
+                  return !responseDate.isSame(filterDate);
+                case "greater_than":
+                  return responseDate.isAfter(filterDate);
+                case "less_than":
+                  return responseDate.isBefore(filterDate);
+                default:
+                  return false;
+              }
+            } else {
+              console.log("mommet", moment(req.query.value).isValid());
+
+              if (moment(req.query.value).isValid()) {
+                return res.status(401).json({ message: "Provide a valid Id" });
+              }
+              // Perform comparison based on the type of value
+              switch (condition) {
+                case "equals":
+                  return typeof value === "number"
+                    ? Number(question.value) === value
+                    : question.value === value;
+
+                case "does_not_equal":
+                  return typeof value === "number"
+                    ? Number(question.value) !== value
+                    : question.value !== value;
+                case "greater_than":
+                  return typeof questionValue !== "string"
+                    ? questionValue > value
+                    : false;
+                case "less_than":
+                  return typeof questionValue !== "string"
+                    ? questionValue < value
+                    : false;
+
+                default:
+                  return false; // Invalid condition, response fails filter
+              }
             }
           } else {
             return false; // Question id doesn't match filter id
